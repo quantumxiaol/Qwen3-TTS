@@ -7,7 +7,7 @@ name = "qwen-tts"
 version = "0.1.1"
 description = "Qwen-TTS python package"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.12,<=3.14"
 classifiers = [
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.9",
@@ -20,15 +20,18 @@ license = { text = "Apache-2.0" }
 authors = [{ name = "Alibaba Qwen Team" }]
 
 dependencies = [
-  "transformers==4.57.3",
   "accelerate==1.12.0",
+  "einops",
+  "flash-attn;platform_system == 'Linux' and platform_machine == 'x86_64'",
   "gradio",
   "librosa",
   "torchaudio",
   "soundfile",
   "sox",
+  "transformers==4.57.3",
   "onnxruntime",
-  "einops",
+  "modelscope>=1.36.0",
+  "huggingface-hub[cli]>=0.36.2",
 ]
 
 [project.urls]
