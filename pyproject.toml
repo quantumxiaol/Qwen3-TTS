@@ -23,15 +23,20 @@ dependencies = [
   "accelerate==1.12.0",
   "einops",
   "flash-attn;platform_system == 'Linux' and platform_machine == 'x86_64'",
+  "fastapi",
   "gradio",
+  "httpx",
   "librosa",
+  "python-multipart",
   "torchaudio",
   "soundfile",
   "sox",
   "transformers==4.57.3",
+  "uvicorn",
   "onnxruntime",
   "modelscope>=1.36.0",
   "huggingface-hub[cli]>=0.36.2",
+  "pytest>=9.0.3",
 ]
 
 [project.urls]
@@ -40,6 +45,8 @@ Repository = "https://github.com/Qwen/Qwen3-TTS"
 
 [project.scripts]
 qwen-tts-demo = "qwen_tts.cli.demo:main"
+qwen-tts-client = "qwen_tts.cli.client:main"
+qwen-tts-server = "qwen_tts.cli.server:main"
 
 [tool.setuptools]
 packages = { find = { where = ["."] , include = ["qwen_tts*"] } }
