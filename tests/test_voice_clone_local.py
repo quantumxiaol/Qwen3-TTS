@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import os
 import time
 from pathlib import Path
@@ -12,8 +13,8 @@ from qwen_tts import Qwen3TTSModel
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_MODEL_PATH = REPO_ROOT / "Qwen3-TTS-12Hz-1.7B-Base"
-DEFAULT_REF_AUDIO_PATH = REPO_ROOT / "ref_audio" / "Admire Vega_15.mp3"
-DEFAULT_REF_TEXT_PATH = REPO_ROOT / "ref_audio" / "Admire Vega_15_jp.txt"
+DEFAULT_REF_AUDIO_PATH = REPO_ROOT / "ref_audio" / "reference.mp3"
+DEFAULT_REF_TEXT_PATH = REPO_ROOT / "ref_audio" / "reference_jp.txt"
 DEFAULT_OUTPUT_DIR = REPO_ROOT / "outputs" / "voice_clone"
 
 SYNTHESIS_CASES = [
@@ -28,6 +29,17 @@ SYNTHESIS_CASES = [
         "こんにちは、今回の音声クローンのテストです。お会いできてうれしいです。",
     ),
 ]
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Run local Qwen3-TTS voice clone smoke test.")
+    parser.add_argument(
+        "--case",
+        choices=("all", "zh", "ja"),
+        default=os.environ.get("QWEN3_TTS_CASE", "all"),
+        help="Synthesis case to run: all, zh, or ja. Can also be set with QWEN3_TTS_CASE.",
+    )
+    return parser.parse_args()
 
 
 def resolve_path(env_name: str, default_path: Path) -> Path:
@@ -93,7 +105,19 @@ def now() -> float:
     return time.perf_counter()
 
 
+def select_synthesis_cases(case: str) -> list[tuple[str, str, str]]:
+    if case == "all":
+        return SYNTHESIS_CASES
+    selected = [item for item in SYNTHESIS_CASES if item[0] == case]
+    if not selected:
+        raise ValueError(f"No synthesis case matched: {case}")
+    return selected
+
+
 def main() -> None:
+    args = parse_args()
+    synthesis_cases = select_synthesis_cases(args.case)
+
     model_path = resolve_path("QWEN3_TTS_BASE_MODEL", DEFAULT_MODEL_PATH)
     ref_audio_path = resolve_path("QWEN3_TTS_REF_AUDIO", DEFAULT_REF_AUDIO_PATH)
     ref_text_path = resolve_path("QWEN3_TTS_REF_TEXT", DEFAULT_REF_TEXT_PATH)
@@ -112,6 +136,7 @@ def main() -> None:
     print(f"[paths] ref_audio={ref_audio_path}")
     print(f"[paths] ref_text={ref_text_path}")
     print(f"[paths] output_dir={output_dir}")
+    print(f"[case] selected={args.case} count={len(synthesis_cases)}")
 
     t0 = now()
     model = Qwen3TTSModel.from_pretrained(
@@ -130,8 +155,8 @@ def main() -> None:
     synchronize_device(device_name)
     t3 = now()
 
-    texts = [item[2] for item in SYNTHESIS_CASES]
-    languages = [item[1] for item in SYNTHESIS_CASES]
+    texts = [item[2] for item in synthesis_cases]
+    languages = [item[1] for item in synthesis_cases]
     do_sample = parse_bool_env("QWEN3_TTS_DO_SAMPLE", False)
 
     t4 = now()
@@ -154,7 +179,7 @@ def main() -> None:
     t5 = now()
 
     stem = ref_audio_path.stem.replace(" ", "_").lower()
-    for (suffix, language, text), wav in zip(SYNTHESIS_CASES, wavs):
+    for (suffix, language, text), wav in zip(synthesis_cases, wavs):
         output_path = output_dir / f"{stem}_{suffix}.wav"
         sf.write(output_path, wav, sr)
         print(f"[saved] {output_path} | language={language} | text={text}")
@@ -169,7 +194,7 @@ def main() -> None:
     print(f"[timing] generate={generation_time:.3f}s")
     print(f"[timing] total_audio={total_audio_duration:.3f}s")
     print(f"[timing] rtf={rtf:.3f}")
-    for (suffix, language, _), duration in zip(SYNTHESIS_CASES, audio_durations):
+    for (suffix, language, _), duration in zip(synthesis_cases, audio_durations):
         print(f"[timing] sample={suffix} language={language} audio_duration={duration:.3f}s")
 
 
