@@ -397,6 +397,35 @@ async def _resolve_required_text_file(
     return saved_path, lines
 
 
+async def _resolve_required_text_lines(
+    store: FileStore,
+    request_id: str,
+    text_file: Optional[UploadFile],
+    text: Optional[list[str]],
+    default_filename: str,
+) -> tuple[Path, list[tuple[int, str]]]:
+    if text_file is not None and text:
+        raise HTTPException(status_code=422, detail="Provide either text_file or text, not both.")
+
+    if text_file is not None:
+        return await _resolve_required_text_file(store, request_id, text_file, default_filename)
+
+    lines: list[tuple[int, str]] = []
+    raw_lines = text or []
+    for line_no, raw_line in enumerate(raw_lines, start=1):
+        normalized = raw_line.strip()
+        if normalized:
+            lines.append((line_no, normalized))
+    if not lines:
+        raise HTTPException(status_code=422, detail="Either text_file or at least one non-empty text value must be provided.")
+
+    content = "\n".join(raw_lines)
+    if not content.endswith("\n"):
+        content += "\n"
+    saved_path = store.save_text(content, request_id, default_filename)
+    return saved_path, lines
+
+
 def _choose_default_narrator(language: str, narrator_speaker: Optional[str], supported: list[str]) -> str:
     if narrator_speaker:
         return narrator_speaker
@@ -537,7 +566,8 @@ def create_app(
     async def tts_voice_clone_batch_file(
         request: Request,
         ref_audio: Annotated[UploadFile, File(...)],
-        text_file: Annotated[UploadFile, File(...)],
+        text_file: Annotated[Optional[UploadFile], File()] = None,
+        text: Annotated[Optional[list[str]], Form()] = None,
         ref_text: Annotated[Optional[str], Form()] = None,
         ref_text_file: Annotated[Optional[UploadFile], File()] = None,
         language: Annotated[str, Form()] = "Auto",
@@ -554,10 +584,11 @@ def create_app(
         subtalker_temperature: Annotated[Optional[float], Form()] = None,
     ) -> VoiceCloneBatchResponse:
         request_id = uuid.uuid4().hex
-        synthesis_text_path, lines = await _resolve_required_text_file(
+        synthesis_text_path, lines = await _resolve_required_text_lines(
             store,
             request_id,
             text_file,
+            text,
             "synthesis_text.txt",
         )
         reference_text, reference_text_path = await _resolve_optional_text(
@@ -587,22 +618,28 @@ def create_app(
         )
         audio_paths: list[StoredFile] = []
         sample_rate: Optional[int] = None
-        for line_no, line_text in lines:
+        try:
+            prompt_items = model.create_voice_clone_prompt(
+                ref_audio=str(prompt_audio_path),
+                ref_text=reference_text,
+                x_vector_only_mode=x_vector_only_mode,
+            )
+            wavs, sr = model.generate_voice_clone(
+                text=[line_text for _, line_text in lines],
+                language=language,
+                voice_clone_prompt=prompt_items,
+                **gen_kwargs,
+            )
+        except (FileNotFoundError, ValueError, RuntimeError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+        if len(wavs) != len(lines):
+            raise HTTPException(status_code=500, detail=f"Generated {len(wavs)} wavs for {len(lines)} input lines.")
+
+        for (line_no, _line_text), wav in zip(lines, wavs):
             output_name = f"{output_base}_{line_no}.wav"
             output_path = store.build_output_path(request_id, output_name, prefix="voice_clone")
-            try:
-                wavs, sr = model.generate_voice_clone(
-                    text=line_text,
-                    language=language,
-                    ref_audio=str(prompt_audio_path),
-                    ref_text=reference_text,
-                    x_vector_only_mode=x_vector_only_mode,
-                    **gen_kwargs,
-                )
-            except (FileNotFoundError, ValueError, RuntimeError) as exc:
-                raise HTTPException(status_code=422, detail=str(exc)) from exc
-
-            sf.write(output_path, wavs[0], sr)
+            sf.write(output_path, wav, sr)
             sample_rate = int(sr)
             audio_paths.append(_stored_file_from_path(request, store, output_path))
 

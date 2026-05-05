@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from contextlib import ExitStack
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, Sequence
 
 import httpx
 
@@ -163,7 +163,8 @@ class Qwen3TTSHttpxClient:
         self,
         *,
         ref_audio_path: str | Path,
-        text_file: str | Path,
+        text_file: Optional[str | Path] = None,
+        texts: Optional[Sequence[str]] = None,
         ref_text: Optional[str] = None,
         ref_text_file: Optional[str | Path] = None,
         language: str = "Auto",
@@ -172,8 +173,13 @@ class Qwen3TTSHttpxClient:
         download_dir: Optional[str | Path] = None,
         **gen_kwargs,
     ) -> dict[str, Any]:
+        if text_file is not None and texts:
+            raise ValueError("Provide either text_file or texts, not both.")
+        if text_file is None and not texts:
+            raise ValueError("Either text_file or texts must be provided.")
+
         with ExitStack() as stack:
-            data: dict[str, str] = {"language": language, "x_vector_only_mode": _form_value(x_vector_only_mode)}
+            data: dict[str, Any] = {"language": language, "x_vector_only_mode": _form_value(x_vector_only_mode)}
             files: dict[str, tuple[str, Any, str]] = {}
 
             if ref_text is not None:
@@ -187,8 +193,11 @@ class Qwen3TTSHttpxClient:
             ref_audio = Path(ref_audio_path).expanduser().resolve()
             files["ref_audio"] = (ref_audio.name, stack.enter_context(ref_audio.open("rb")), "audio/*")
 
-            synthesis_text_file = Path(text_file).expanduser().resolve()
-            files["text_file"] = (synthesis_text_file.name, stack.enter_context(synthesis_text_file.open("rb")), "text/plain")
+            if text_file is not None:
+                synthesis_text_file = Path(text_file).expanduser().resolve()
+                files["text_file"] = (synthesis_text_file.name, stack.enter_context(synthesis_text_file.open("rb")), "text/plain")
+            if texts:
+                data["text"] = list(texts)
 
             if ref_text_file is not None:
                 path = Path(ref_text_file).expanduser().resolve()

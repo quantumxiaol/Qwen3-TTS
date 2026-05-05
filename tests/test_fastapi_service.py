@@ -11,10 +11,17 @@ from qwen_tts.cli.fastapi_service import ServiceSettings, create_app
 class FakeBaseModel:
     def __init__(self) -> None:
         self.calls: list[dict] = []
+        self.prompt_calls: list[dict] = []
+
+    def create_voice_clone_prompt(self, **kwargs):
+        self.prompt_calls.append(kwargs)
+        return ["fake-prompt"]
 
     def generate_voice_clone(self, **kwargs):
         self.calls.append(kwargs)
-        return [np.zeros(2400, dtype=np.float32)], 24000
+        text = kwargs["text"]
+        count = len(text) if isinstance(text, list) else 1
+        return [np.zeros(2400, dtype=np.float32) for _ in range(count)], 24000
 
 
 class FakeCustomModel:
@@ -167,9 +174,51 @@ def test_voice_clone_batch_file_endpoint_generates_one_wav_per_nonempty_line(tmp
     assert payload["audio_paths"][0]["filename"] == "batch_clone_1.wav"
     assert payload["audio_paths"][1]["filename"] == "batch_clone_3.wav"
     assert Path(payload["text_file"]["path"]).exists()
-    assert len(manager.base.calls) == 2
-    assert manager.base.calls[0]["text"] == "第一句。"
-    assert manager.base.calls[1]["text"] == "第二句。"
+    assert len(manager.base.prompt_calls) == 1
+    assert len(manager.base.calls) == 1
+    assert manager.base.prompt_calls[0]["ref_text"] == "这是参考音频对应的文本。"
+    assert manager.base.calls[0]["text"] == ["第一句。", "第二句。"]
+    assert manager.base.calls[0]["voice_clone_prompt"] == ["fake-prompt"]
+
+
+def test_voice_clone_batch_file_endpoint_accepts_repeated_text_values(tmp_path: Path) -> None:
+    settings = ServiceSettings(
+        storage_root=tmp_path / "service_storage",
+        base_model="base",
+        custom_model="custom",
+        voice_design_model="design",
+        device="cpu",
+        dtype="float32",
+        attn_implementation="sdpa",
+        narrator_speaker=None,
+    )
+    manager = FakeModelManager()
+    app = create_app(settings=settings, model_manager=manager)
+    client = TestClient(app)
+
+    response = client.post(
+        "/qwen3tts/tts/voice_clone_batch_file",
+        data={
+            "ref_text": "这是参考音频对应的文本。",
+            "language": "Chinese",
+            "output_prefix": "batch_clone",
+            "text": ["第一句。", "第二句。"],
+        },
+        files={
+            "ref_audio": ("speaker.wav", b"fake-audio", "audio/wav"),
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "success"
+    assert len(payload["audio_paths"]) == 2
+    assert payload["audio_paths"][0]["filename"] == "batch_clone_1.wav"
+    assert payload["audio_paths"][1]["filename"] == "batch_clone_2.wav"
+    assert Path(payload["text_file"]["path"]).read_text(encoding="utf-8") == "第一句。\n第二句。\n"
+    assert len(manager.base.prompt_calls) == 1
+    assert len(manager.base.calls) == 1
+    assert manager.base.calls[0]["text"] == ["第一句。", "第二句。"]
 
 
 def test_narration_batch_file_endpoint_generates_one_wav_per_nonempty_line(tmp_path: Path) -> None:

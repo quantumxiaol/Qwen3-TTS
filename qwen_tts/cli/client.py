@@ -88,9 +88,14 @@ def build_parser() -> argparse.ArgumentParser:
     voice_clone_parser.add_argument("--download-to", default=None, help="Optional local wav path to download after synthesis.")
     _add_generation_args(voice_clone_parser)
 
-    voice_clone_batch_parser = subparsers.add_parser("voice-clone-batch-file", help="Call /qwen3tts/tts/voice_clone_batch_file.")
+    voice_clone_batch_parser = subparsers.add_parser(
+        "voice-clone-batch-file",
+        aliases=["voice-clone-batch"],
+        help="Call /qwen3tts/tts/voice_clone_batch_file.",
+    )
     voice_clone_batch_parser.add_argument("--ref-audio", required=True, help="Reference audio path.")
-    voice_clone_batch_parser.add_argument("--text-file", required=True, help="Batch synthesis text file path.")
+    voice_clone_batch_parser.add_argument("--text-file", default=None, help="Batch synthesis text file path.")
+    voice_clone_batch_parser.add_argument("--text", action="append", default=None, help="Batch synthesis text. Repeat for multiple lines.")
     voice_clone_batch_parser.add_argument("--ref-text", default=None, help="Reference transcript.")
     voice_clone_batch_parser.add_argument("--ref-text-file", default=None, help="Reference transcript file path.")
     voice_clone_batch_parser.add_argument("--language", default="Auto", help="Synthesis language.")
@@ -161,11 +166,16 @@ def main() -> None:
             )
             return
 
-        if args.command == "voice-clone-batch-file":
+        if args.command in {"voice-clone-batch-file", "voice-clone-batch"}:
+            if args.text_file and args.text:
+                parser.error("voice-clone-batch accepts either --text-file or repeated --text values, not both.")
+            if not args.text_file and not args.text:
+                parser.error("voice-clone-batch requires --text-file or at least one --text value.")
             _print_payload(
                 client.voice_clone_batch_file(
                     ref_audio_path=args.ref_audio,
                     text_file=args.text_file,
+                    texts=args.text,
                     ref_text=args.ref_text,
                     ref_text_file=args.ref_text_file,
                     language=args.language,

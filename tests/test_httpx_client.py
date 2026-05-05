@@ -9,12 +9,13 @@ from qwen_tts.httpx_client import Qwen3TTSHttpxClient
 
 
 def test_httpx_client_voice_clone_request_and_download() -> None:
-    captured: dict[str, object] = {}
+    captured: dict[str, object] = {"paths": []}
 
     def handler(request: httpx.Request) -> httpx.Response:
         body = request.read()
-        captured["path"] = request.url.path
-        captured["body"] = body
+        captured["paths"].append(request.url.path)
+        if request.url.path == "/qwen3tts/tts/voice_clone":
+            captured["body"] = body
 
         if request.url.path == "/qwen3tts/tts/voice_clone":
             return httpx.Response(
@@ -48,7 +49,7 @@ def test_httpx_client_voice_clone_request_and_download() -> None:
             )
 
         assert payload["status"] == "success"
-        assert captured["path"] == "/qwen3tts/tts/voice_clone"
+        assert captured["paths"][0] == "/qwen3tts/tts/voice_clone"
         body = captured["body"]
         assert isinstance(body, bytes)
         assert b'name="text"' in body
@@ -76,9 +77,11 @@ def test_httpx_client_narration_and_health() -> None:
 
 def test_httpx_client_batch_endpoints_and_download_dir() -> None:
     captured_paths: list[str] = []
+    captured_bodies: dict[str, bytes] = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
         captured_paths.append(request.url.path)
+        captured_bodies[request.url.path] = request.read()
         if request.url.path == "/qwen3tts/tts/narration_batch_file":
             return httpx.Response(
                 200,
@@ -139,3 +142,42 @@ def test_httpx_client_batch_endpoints_and_download_dir() -> None:
         assert (clone_download_dir / "c.wav").read_bytes() == b"c"
         assert "/qwen3tts/tts/narration_batch_file" in captured_paths
         assert "/qwen3tts/tts/voice_clone_batch_file" in captured_paths
+        assert b'name="text_file"' in captured_bodies["/qwen3tts/tts/voice_clone_batch_file"]
+
+
+def test_httpx_client_voice_clone_batch_accepts_texts() -> None:
+    captured: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["path"] = request.url.path
+        captured["body"] = request.read()
+        if request.url.path == "/qwen3tts/tts/voice_clone_batch_file":
+            return httpx.Response(
+                200,
+                json={
+                    "status": "success",
+                    "audio_paths": [],
+                },
+            )
+        raise AssertionError(f"Unexpected path: {request.url.path}")
+
+    transport = httpx.MockTransport(handler)
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        ref_audio = tmp_path / "ref.wav"
+        ref_audio.write_bytes(b"audio")
+
+        with Qwen3TTSHttpxClient(client=httpx.Client(base_url="http://testserver", transport=transport)) as client:
+            payload = client.voice_clone_batch_file(
+                ref_audio_path=ref_audio,
+                texts=["第一句。", "第二句。"],
+                ref_text="参考文本",
+                language="Chinese",
+            )
+
+    assert payload["status"] == "success"
+    assert captured["path"] == "/qwen3tts/tts/voice_clone_batch_file"
+    body = captured["body"]
+    assert isinstance(body, bytes)
+    assert body.count(b'name="text"') == 2
+    assert b'name="text_file"' not in body

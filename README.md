@@ -469,6 +469,15 @@ qwen-tts-client voice-clone \
   --language Chinese \
   --download-to ./voice_clone.wav
 
+# voice clone batch with repeated text values
+qwen-tts-client voice-clone-batch \
+  --ref-audio ./ref_audio.wav \
+  --text "第一句台词。" \
+  --text "第二句台词。" \
+  --ref-text "这是参考音频的文本。" \
+  --language Chinese \
+  --download-dir ./batch_voice_clone_outputs
+
 # narration
 qwen-tts-client narration \
   --text "这是一段旁白文本。" \
