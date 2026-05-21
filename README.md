@@ -40,6 +40,122 @@ We release **Qwen3-TTS**, a series of powerful speech generation capabilities de
 - [Evaluation](#evaluation)
 - [Citation](#citation)
 
+## Service
+### Launch FastAPI Service
+
+If you need a backend service for uploading reference files and downloading generated wav outputs, you can run the built-in FastAPI server:
+
+```bash
+qwen-tts-server \
+  --host 0.0.0.0 \
+  --port 8001 \
+  --base-model ./Qwen3-TTS-12Hz-1.7B-Base \
+  --custom-model ./Qwen3-TTS-12Hz-1.7B-CustomVoice \
+  --storage-root ./storage/qwen3_tts_service \
+  --device mps \
+  --dtype float32
+```
+
+Main endpoints:
+
+- `POST /qwen3tts/tts/voice_clone`: upload `ref_audio`, plus `text` or `text_file`, and `ref_text` or `ref_text_file`.
+- `POST /qwen3tts/tts/voice_clone_batch_file`: upload `ref_audio` and a `text_file`, then synthesize one wav per non-empty line.
+- `POST /qwen3tts/tts/narration`: generate a narrator-style voice with the CustomVoice model.
+- `POST /qwen3tts/tts/narration_batch_file`: upload a `text_file`, then synthesize one wav per non-empty line.
+- `GET /qwen3tts/files/outputs/{request_id}/{filename}`: download generated wav outputs.
+
+Uploaded inputs are stored under `storage_root/uploads/<request_id>/`, and generated audio is stored under `storage_root/outputs/<request_id>/`, so inbound and outbound files are separated and traceable per request.
+
+### Python httpx Client
+
+You can call the FastAPI service from Python with the bundled `httpx` client:
+
+```python
+from qwen_tts.httpx_client import Qwen3TTSHttpxClient
+
+with Qwen3TTSHttpxClient(server_url="http://127.0.0.1:8001") as client:
+    result = client.voice_clone(
+        ref_audio_path="./ref_audio.wav",
+        text="你好，这是克隆测试。",
+        ref_text="这是参考音频的文本。",
+        language="Chinese",
+        download_to="./voice_clone.wav",
+    )
+    print(result["audio"]["url"])
+
+    narration = client.narration(
+        text="这是一段旁白文本。",
+        language="Chinese",
+        download_to="./narration.wav",
+    )
+    print(narration["speaker"])
+
+    batch_result = client.narration_batch_file(
+        text_file="./lines.txt",
+        language="Chinese",
+        download_dir="./batch_narration_outputs",
+    )
+    print(len(batch_result["audio_paths"]))
+```
+
+### Command Line Client
+
+The repository also provides `qwen-tts-client`, which talks to the FastAPI service over HTTP. The default target is `http://127.0.0.1:8001`.
+
+```bash
+# health
+qwen-tts-client health
+
+# list narration speakers
+qwen-tts-client narrators
+
+# voice clone
+qwen-tts-client voice-clone \
+  --ref-audio ./ref_audio.wav \
+  --text "你好，这是克隆测试。" \
+  --ref-text "这是参考音频的文本。" \
+  --language Chinese \
+  --download-to ./voice_clone.wav
+
+# voice clone batch with repeated text values
+qwen-tts-client voice-clone-batch \
+  --ref-audio ./ref_audio.wav \
+  --text "第一句台词。" \
+  --text "第二句台词。" \
+  --ref-text "这是参考音频的文本。" \
+  --language Chinese \
+  --non-streaming-mode true \
+  --do-sample true \
+  --temperature 0.6 \
+  --top-p 0.85 \
+  --top-k 20 \
+  --subtalker-do-sample true \
+  --subtalker-temperature 0.6 \
+  --subtalker-top-p 0.85 \
+  --subtalker-top-k 20 \
+  --download-dir ./batch_voice_clone_outputs
+
+# narration
+qwen-tts-client narration \
+  --text "这是一段旁白文本。" \
+  --language Chinese \
+  --download-to ./narration.wav
+
+# voice clone batch file
+qwen-tts-client voice-clone-batch-file \
+  --ref-audio ./ref_audio.wav \
+  --text-file ./lines.txt \
+  --ref-text "这是参考音频的文本。" \
+  --language Chinese \
+  --download-dir ./voice_clone_batch_outputs
+
+# narration batch file
+qwen-tts-client narration-batch-file \
+  --text-file ./lines.txt \
+  --language Chinese \
+  --download-dir ./narration_batch_outputs
+```
+
 ## Overview
 ### Introduction
 
@@ -395,109 +511,7 @@ qwen-tts-demo Qwen/Qwen3-TTS-12Hz-1.7B-Base --ip 0.0.0.0 --port 8000
 
 And then open `http://<your-ip>:8000`, or access it via port forwarding in tools like VS Code.
 
-### Launch FastAPI Service
 
-If you need a backend service for uploading reference files and downloading generated wav outputs, you can run the built-in FastAPI server:
-
-```bash
-qwen-tts-server \
-  --host 0.0.0.0 \
-  --port 8001 \
-  --base-model ./Qwen3-TTS-12Hz-1.7B-Base \
-  --custom-model ./Qwen3-TTS-12Hz-1.7B-CustomVoice \
-  --storage-root ./storage/qwen3_tts_service
-```
-
-Main endpoints:
-
-- `POST /qwen3tts/tts/voice_clone`: upload `ref_audio`, plus `text` or `text_file`, and `ref_text` or `ref_text_file`.
-- `POST /qwen3tts/tts/voice_clone_batch_file`: upload `ref_audio` and a `text_file`, then synthesize one wav per non-empty line.
-- `POST /qwen3tts/tts/narration`: generate a narrator-style voice with the CustomVoice model.
-- `POST /qwen3tts/tts/narration_batch_file`: upload a `text_file`, then synthesize one wav per non-empty line.
-- `GET /qwen3tts/files/outputs/{request_id}/{filename}`: download generated wav outputs.
-
-Uploaded inputs are stored under `storage_root/uploads/<request_id>/`, and generated audio is stored under `storage_root/outputs/<request_id>/`, so inbound and outbound files are separated and traceable per request.
-
-### Python httpx Client
-
-You can call the FastAPI service from Python with the bundled `httpx` client:
-
-```python
-from qwen_tts.httpx_client import Qwen3TTSHttpxClient
-
-with Qwen3TTSHttpxClient(server_url="http://127.0.0.1:8001") as client:
-    result = client.voice_clone(
-        ref_audio_path="./ref_audio.wav",
-        text="你好，这是克隆测试。",
-        ref_text="这是参考音频的文本。",
-        language="Chinese",
-        download_to="./voice_clone.wav",
-    )
-    print(result["audio"]["url"])
-
-    narration = client.narration(
-        text="这是一段旁白文本。",
-        language="Chinese",
-        download_to="./narration.wav",
-    )
-    print(narration["speaker"])
-
-    batch_result = client.narration_batch_file(
-        text_file="./lines.txt",
-        language="Chinese",
-        download_dir="./batch_narration_outputs",
-    )
-    print(len(batch_result["audio_paths"]))
-```
-
-### Command Line Client
-
-The repository also provides `qwen-tts-client`, which talks to the FastAPI service over HTTP. The default target is `http://127.0.0.1:8001`.
-
-```bash
-# health
-qwen-tts-client health
-
-# list narration speakers
-qwen-tts-client narrators
-
-# voice clone
-qwen-tts-client voice-clone \
-  --ref-audio ./ref_audio.wav \
-  --text "你好，这是克隆测试。" \
-  --ref-text "这是参考音频的文本。" \
-  --language Chinese \
-  --download-to ./voice_clone.wav
-
-# voice clone batch with repeated text values
-qwen-tts-client voice-clone-batch \
-  --ref-audio ./ref_audio.wav \
-  --text "第一句台词。" \
-  --text "第二句台词。" \
-  --ref-text "这是参考音频的文本。" \
-  --language Chinese \
-  --download-dir ./batch_voice_clone_outputs
-
-# narration
-qwen-tts-client narration \
-  --text "这是一段旁白文本。" \
-  --language Chinese \
-  --download-to ./narration.wav
-
-# voice clone batch file
-qwen-tts-client voice-clone-batch-file \
-  --ref-audio ./ref_audio.wav \
-  --text-file ./lines.txt \
-  --ref-text "这是参考音频的文本。" \
-  --language Chinese \
-  --download-dir ./voice_clone_batch_outputs
-
-# narration batch file
-qwen-tts-client narration-batch-file \
-  --text-file ./lines.txt \
-  --language Chinese \
-  --download-dir ./narration_batch_outputs
-```
 
 #### Base Model HTTPS Notes
 

@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 import platform
 import threading
@@ -44,6 +45,7 @@ DEFAULT_CUSTOM_MODEL = "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice"
 DEFAULT_VOICE_DESIGN_MODEL = "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign"
 DEFAULT_STORAGE_ROOT = Path("storage") / "qwen3_tts_service"
 API_PREFIX = "/qwen3tts"
+LOGGER = logging.getLogger("qwen_tts.service")
 DEFAULT_NARRATOR_BY_LANGUAGE = {
     "chinese": "Uncle_Fu",
     "english": "Ryan",
@@ -120,6 +122,8 @@ def _build_gen_kwargs(
     top_p: Optional[float],
     temperature: Optional[float],
     repetition_penalty: Optional[float],
+    non_streaming_mode: Optional[bool],
+    subtalker_dosample: Optional[bool],
     subtalker_top_k: Optional[int],
     subtalker_top_p: Optional[float],
     subtalker_temperature: Optional[float],
@@ -131,6 +135,8 @@ def _build_gen_kwargs(
         "top_p": top_p,
         "temperature": temperature,
         "repetition_penalty": repetition_penalty,
+        "non_streaming_mode": non_streaming_mode,
+        "subtalker_dosample": subtalker_dosample,
         "subtalker_top_k": subtalker_top_k,
         "subtalker_top_p": subtalker_top_p,
         "subtalker_temperature": subtalker_temperature,
@@ -500,6 +506,8 @@ def create_app(
         top_p: Annotated[Optional[float], Form()] = None,
         temperature: Annotated[Optional[float], Form()] = None,
         repetition_penalty: Annotated[Optional[float], Form()] = None,
+        non_streaming_mode: Annotated[Optional[bool], Form()] = True,
+        subtalker_dosample: Annotated[Optional[bool], Form()] = None,
         subtalker_top_k: Annotated[Optional[int], Form()] = None,
         subtalker_top_p: Annotated[Optional[float], Form()] = None,
         subtalker_temperature: Annotated[Optional[float], Form()] = None,
@@ -533,9 +541,19 @@ def create_app(
             top_p=top_p,
             temperature=temperature,
             repetition_penalty=repetition_penalty,
+            non_streaming_mode=non_streaming_mode,
+            subtalker_dosample=subtalker_dosample,
             subtalker_top_k=subtalker_top_k,
             subtalker_top_p=subtalker_top_p,
             subtalker_temperature=subtalker_temperature,
+        )
+        LOGGER.info(
+            "voice_clone request_id=%s language=%s text_chars=%s x_vector_only_mode=%s gen_kwargs=%s",
+            request_id,
+            language,
+            len(synthesis_text),
+            x_vector_only_mode,
+            gen_kwargs,
         )
         try:
             wavs, sr = model.generate_voice_clone(
@@ -579,6 +597,8 @@ def create_app(
         top_p: Annotated[Optional[float], Form()] = None,
         temperature: Annotated[Optional[float], Form()] = None,
         repetition_penalty: Annotated[Optional[float], Form()] = None,
+        non_streaming_mode: Annotated[Optional[bool], Form()] = True,
+        subtalker_dosample: Annotated[Optional[bool], Form()] = None,
         subtalker_top_k: Annotated[Optional[int], Form()] = None,
         subtalker_top_p: Annotated[Optional[float], Form()] = None,
         subtalker_temperature: Annotated[Optional[float], Form()] = None,
@@ -612,12 +632,22 @@ def create_app(
             top_p=top_p,
             temperature=temperature,
             repetition_penalty=repetition_penalty,
+            non_streaming_mode=non_streaming_mode,
+            subtalker_dosample=subtalker_dosample,
             subtalker_top_k=subtalker_top_k,
             subtalker_top_p=subtalker_top_p,
             subtalker_temperature=subtalker_temperature,
         )
         audio_paths: list[StoredFile] = []
         sample_rate: Optional[int] = None
+        LOGGER.info(
+            "voice_clone_batch request_id=%s language=%s lines=%s x_vector_only_mode=%s gen_kwargs=%s",
+            request_id,
+            language,
+            len(lines),
+            x_vector_only_mode,
+            gen_kwargs,
+        )
         try:
             prompt_items = model.create_voice_clone_prompt(
                 ref_audio=str(prompt_audio_path),
@@ -670,6 +700,8 @@ def create_app(
         top_p: Annotated[Optional[float], Form()] = None,
         temperature: Annotated[Optional[float], Form()] = None,
         repetition_penalty: Annotated[Optional[float], Form()] = None,
+        non_streaming_mode: Annotated[Optional[bool], Form()] = None,
+        subtalker_dosample: Annotated[Optional[bool], Form()] = None,
         subtalker_top_k: Annotated[Optional[int], Form()] = None,
         subtalker_top_p: Annotated[Optional[float], Form()] = None,
         subtalker_temperature: Annotated[Optional[float], Form()] = None,
@@ -698,6 +730,8 @@ def create_app(
             top_p=top_p,
             temperature=temperature,
             repetition_penalty=repetition_penalty,
+            non_streaming_mode=non_streaming_mode,
+            subtalker_dosample=subtalker_dosample,
             subtalker_top_k=subtalker_top_k,
             subtalker_top_p=subtalker_top_p,
             subtalker_temperature=subtalker_temperature,
@@ -739,6 +773,8 @@ def create_app(
         top_p: Annotated[Optional[float], Form()] = None,
         temperature: Annotated[Optional[float], Form()] = None,
         repetition_penalty: Annotated[Optional[float], Form()] = None,
+        non_streaming_mode: Annotated[Optional[bool], Form()] = None,
+        subtalker_dosample: Annotated[Optional[bool], Form()] = None,
         subtalker_top_k: Annotated[Optional[int], Form()] = None,
         subtalker_top_p: Annotated[Optional[float], Form()] = None,
         subtalker_temperature: Annotated[Optional[float], Form()] = None,
@@ -766,6 +802,8 @@ def create_app(
             top_p=top_p,
             temperature=temperature,
             repetition_penalty=repetition_penalty,
+            non_streaming_mode=non_streaming_mode,
+            subtalker_dosample=subtalker_dosample,
             subtalker_top_k=subtalker_top_k,
             subtalker_top_p=subtalker_top_p,
             subtalker_temperature=subtalker_temperature,

@@ -31,6 +31,8 @@ def _add_generation_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--top-p", type=float, default=None)
     parser.add_argument("--temperature", type=float, default=None)
     parser.add_argument("--repetition-penalty", type=float, default=None)
+    parser.add_argument("--non-streaming-mode", default=None, choices=["true", "false"])
+    parser.add_argument("--subtalker-do-sample", default=None, choices=["true", "false"])
     parser.add_argument("--subtalker-top-k", type=int, default=None)
     parser.add_argument("--subtalker-top-p", type=float, default=None)
     parser.add_argument("--subtalker-temperature", type=float, default=None)
@@ -42,6 +44,16 @@ def _collect_gen_kwargs(args: argparse.Namespace) -> dict[str, Any]:
         do_sample = True
     elif args.do_sample == "false":
         do_sample = False
+    non_streaming_mode = None
+    if args.non_streaming_mode == "true":
+        non_streaming_mode = True
+    elif args.non_streaming_mode == "false":
+        non_streaming_mode = False
+    subtalker_dosample = None
+    if args.subtalker_do_sample == "true":
+        subtalker_dosample = True
+    elif args.subtalker_do_sample == "false":
+        subtalker_dosample = False
 
     mapping = {
         "max_new_tokens": args.max_new_tokens,
@@ -50,6 +62,8 @@ def _collect_gen_kwargs(args: argparse.Namespace) -> dict[str, Any]:
         "top_p": args.top_p,
         "temperature": args.temperature,
         "repetition_penalty": args.repetition_penalty,
+        "non_streaming_mode": non_streaming_mode,
+        "subtalker_dosample": subtalker_dosample,
         "subtalker_top_k": args.subtalker_top_k,
         "subtalker_top_p": args.subtalker_top_p,
         "subtalker_temperature": args.subtalker_temperature,
