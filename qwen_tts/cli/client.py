@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 from pathlib import Path
 from typing import Any
 
@@ -71,6 +72,13 @@ def _collect_gen_kwargs(args: argparse.Namespace) -> dict[str, Any]:
     return {key: value for key, value in mapping.items() if value is not None}
 
 
+def _positive_float(value: str) -> float:
+    parsed = float(value)
+    if not math.isfinite(parsed) or parsed <= 0:
+        raise argparse.ArgumentTypeError("value must be a finite number greater than 0")
+    return parsed
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="qwen-tts-client",
@@ -85,6 +93,21 @@ def build_parser() -> argparse.ArgumentParser:
 
     subparsers.add_parser("health", help="Query service health.")
     subparsers.add_parser("narrators", help="List supported narration speakers.")
+    shutdown_parser = subparsers.add_parser(
+        "shutdown",
+        help="Gracefully stop a local Qwen3-TTS server.",
+    )
+    shutdown_parser.add_argument(
+        "--wait-timeout",
+        type=_positive_float,
+        default=30.0,
+        help="Seconds to wait for the server port to stop responding.",
+    )
+    shutdown_parser.add_argument(
+        "--no-wait",
+        action="store_true",
+        help="Return after shutdown is accepted instead of waiting for exit.",
+    )
 
     download_parser = subparsers.add_parser("download", help="Download a file by URL.")
     download_parser.add_argument("--url", required=True, help="Absolute file URL returned by the service.")
@@ -155,6 +178,15 @@ def main() -> None:
 
         if args.command == "narrators":
             _print_payload(client.list_narrators())
+            return
+
+        if args.command == "shutdown":
+            _print_payload(
+                client.shutdown(
+                    wait=not args.no_wait,
+                    wait_timeout=args.wait_timeout,
+                )
+            )
             return
 
         if args.command == "download":

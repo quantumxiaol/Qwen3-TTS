@@ -47,7 +47,19 @@ def main() -> None:
         settings = replace(settings, narrator_speaker=args.narrator_speaker)
 
     app = create_app(settings=settings)
-    uvicorn.run(app, host=args.host, port=args.port)
+    config = uvicorn.Config(
+        app=app,
+        host=args.host,
+        port=args.port,
+        proxy_headers=False,
+    )
+    server = uvicorn.Server(config)
+
+    def request_graceful_shutdown() -> None:
+        server.should_exit = True
+
+    app.state.shutdown_controller.set_shutdown_callback(request_graceful_shutdown)
+    server.run()
 
 
 if __name__ == "__main__":

@@ -46,8 +46,11 @@ We release **Qwen3-TTS**, a series of powerful speech generation capabilities de
 If you need a backend service for uploading reference files and downloading generated wav outputs, you can run the built-in FastAPI server:
 
 ```bash
+PYTORCH_ENABLE_MPS_FALLBACK=1 \
+PYTORCH_MPS_LOW_WATERMARK_RATIO=0.55 \
+PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.75 \
 qwen-tts-server \
-  --host 0.0.0.0 \
+  --host 127.0.0.1 \
   --port 8001 \
   --base-model ./Qwen3-TTS-12Hz-1.7B-Base \
   --custom-model ./Qwen3-TTS-12Hz-1.7B-CustomVoice \
@@ -58,6 +61,7 @@ qwen-tts-server \
 
 Main endpoints:
 
+- `POST /qwen3tts/admin/shutdown`: gracefully stop the server (loopback clients only, with the bundled client confirmation header).
 - `POST /qwen3tts/tts/voice_clone`: upload `ref_audio`, plus `text` or `text_file`, and `ref_text` or `ref_text_file`.
 - `POST /qwen3tts/tts/voice_clone_batch_file`: upload `ref_audio` and a `text_file`, then synthesize one wav per non-empty line.
 - `POST /qwen3tts/tts/narration`: generate a narrator-style voice with the CustomVoice model.
@@ -105,6 +109,9 @@ The repository also provides `qwen-tts-client`, which talks to the FastAPI servi
 ```bash
 # health
 qwen-tts-client health
+
+# gracefully stop the local server and wait for its process to exit
+qwen-tts-client shutdown
 
 # list narration speakers
 qwen-tts-client narrators
